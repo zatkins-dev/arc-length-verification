@@ -1,0 +1,30 @@
+# material properties
+young: 4e4
+poisson: 0.2
+
+# mesh properties and geometry
+rad: 1.0   # inner radius of cylinder shell
+width: 1.0  # z-width
+height: 1.0 # outer radius - inner radius
+
+# da_refine: 2 # refine the mesh via subdivision twice
+
+# loading
+loading: 0
+
+# monitoring
+snes_monitor_short:
+snes_converged_reason:
+# ksp_monitor_short:
+# view: # .vts file of final state
+view_line: # cross section of final state written to stdout
+monitor_solution: vtk:solution.vts
+monitor_force: vtk:force.vts
+monitor_force_displacement: ascii:force_displacement.csv
+
+# ksp options
+# ksp_type: preonly
+# pc_type: lu
+pc_type: mg
+mg_levels_ksp_max_it: 10
+snes_max_it: 400

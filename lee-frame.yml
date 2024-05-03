@@ -1,0 +1,39 @@
+# material properties
+young: 72e3 # N/(mm)^2
+poisson: 0.3
+
+# mesh properties and geometry
+rad: 1200.0 # (mm) length of each frame side
+width: 20.0  # (mm) z-width
+height: 30.0 # (mm) y-width
+
+# da_refine: 2 # refine the mesh via subdivision twice
+
+# loading
+loading: 0
+ploading: -1.25e1 # 20kN
+control_type: arclength
+
+# arc length
+snes_type: newtonal
+snes_newtonal_lambda_min: -1
+snes_newtonal_step_size: 10
+snes_newtonal_max_continuation_steps: 10000
+snes_max_funcs: -1
+
+# monitoring
+snes_monitor_short:
+snes_converged_reason:
+ksp_converged_reason:
+
+# ksp_monitor_short:
+view_line: # cross section of final state written to stdout
+monitor_solution: vtk:solution.vts
+monitor_force: vtk:force.vts
+monitor_force_displacement: ascii:force_displacement.csv
+
+# ksp options
+pc_type: lu
+ksp_type: preonly
+# pc_type: mg
+# mg_levels_ksp_max_it: 10
