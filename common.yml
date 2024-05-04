@@ -1,11 +1,11 @@
 # material properties
 young: 4e4
-poisson: 0.2
+poisson: 0.48
 
 # mesh properties and geometry
-rad: 1.0   # inner radius of cylinder shell
-width: 1.0  # z-width
-height: 1.0 # outer radius - inner radius
+rad: 100.0   # inner radius of cylinder shell
+width: 3.0  # z-width
+height: 3.0 # outer radius - inner radius
 
 # da_refine: 2 # refine the mesh via subdivision twice
 
@@ -28,3 +28,4 @@ monitor_force_displacement: ascii:force_displacement.csv
 pc_type: mg
 mg_levels_ksp_max_it: 10
 snes_max_it: 400
+ksp_rtol: 1e-4

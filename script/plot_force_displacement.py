@@ -1,3 +1,5 @@
+from re import M
+from matplotlib import markers
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,8 +22,14 @@ plt.rc('legend', fontsize=12)    # legend fontsize
 series_names = {
     'arclength_exact': "Arc-Length, Crisfield",
     'arclength_normal': "Arc-Length, Updated Normal",
-    'newton': "Newton with CG and Multigrid",
-    'newton_lu': "Newton with LU Factorization",
+    'newton': "Newton,",
+    # 'newton_lu': "Newton, LU",
+}
+
+fargs = {
+    'arclength_exact': dict(marker='+', markersize=10),
+    'arclength_normal': dict(marker='x', markersize=10),
+    'newton': dict(marker='o', markersize=5),
 }
 
 filename = "force_displacement.csv"
@@ -48,7 +56,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-t", "--title",
         type=str,
-        default="Full Sinker"
+        default=""
     )
 
     args = parser.parse_args()
@@ -71,10 +79,10 @@ if __name__ == "__main__":
             data = pd.read_csv(file)
             print(f"Read {len(data)} data points")
             force = data["force"]
-            displacement = data["displacement"]
-
-            label = f"{series_names[series_from_file(file)]}"
-            ax.plot(displacement, force, label=label, marker="x")
+            displacement = data["u_y"]
+            series = series_from_file(file)
+            label = f"{series_names[series]}"
+            ax.plot(displacement, force, label=label, **fargs[series])
         ax.set_title(args.title)
         ax.set_xlabel("Displacement [$m$]")
         ax.set_ylabel("Force [$N$]")

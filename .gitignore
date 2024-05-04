@@ -2,3 +2,6 @@ bin
 lib
 build
 output
+*.vts
+*.txt
+*.csv

@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, help));
   PetscCall(FormElements());
   comm = PETSC_COMM_WORLD;
-  PetscCall(DMDACreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_PERIODIC, DMDA_STENCIL_BOX, 101, 3, 3, PETSC_DECIDE,
+  PetscCall(DMDACreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_BOX, 51, 4, 3, PETSC_DECIDE,
                          PETSC_DECIDE, PETSC_DECIDE, 3, 1, NULL, NULL, NULL, &da));
   PetscCall(DMSetFromOptions(da));
   PetscCall(DMSetUp(da));
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
   PetscCall(DMDAGetInfo(da, 0, &mx, &my, PETSC_IGNORE, PETSC_IGNORE, PETSC_IGNORE, PETSC_IGNORE, PETSC_IGNORE, PETSC_IGNORE, PETSC_IGNORE,
                         PETSC_IGNORE, PETSC_IGNORE, PETSC_IGNORE));
   user.loading      = 0.0;
-  user.arc          = 2 * PETSC_PI / 3;
+  user.arc          = PETSC_PI / 3;
   user.mu           = 4.0;
   user.lambda       = 1.0;
   user.rad          = 100.0;
@@ -98,6 +98,7 @@ int main(int argc, char **argv) {
   user.ploading     = -5e3;
   user.load_factor  = 1.0;
   user.use_implicit = PETSC_FALSE;
+  user.da           = da;
 
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-arc", &user.arc, NULL));
   PetscCall(PetscOptionsGetReal(NULL, NULL, "-mu", &user.mu, &muflg));
@@ -161,7 +162,7 @@ int main(int argc, char **argv) {
 }
 
 PetscInt OnBoundary(PetscInt i, PetscInt j, PetscInt k, PetscInt mx, PetscInt my, PetscInt mz) {
-  if ((i == 0 || i == mx - 1) && (j == my - 1)) return 1;
+  if ((i == 0 || i == mx - 1)) return 1;
   // if (i < 6 || i >= mx - 6) return 1;
   // if (i == 0 && j == (my - 1) / 2 && k == (mz - 1) / 2) return 1;
   // if (i == mx - 1) return 1;
@@ -172,7 +173,8 @@ PetscInt OnPointForceBoundary(DM da, PetscInt i, PetscInt j, PetscInt k) {
   PetscInt mx, my, mz;
 
   PetscCall(DMDAGetInfo(da, 0, &mx, &my, &mz, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL));
-  if (abs(i - (mx - 1) / 2) <= 2) return 1;
+  // if (i == mx / 2 && j == my - 1) return 1;
+  if (i == mx / 2) return 1;
   return 0;
 }
 
@@ -394,7 +396,8 @@ void GatherElementData(PetscInt mx, PetscInt my, PetscInt mz, Field ***x, CoordF
         if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz)) {
           BoundaryValue(i + ii, j + jj, k + kk, mx, my, mz, ex[idx], user);
         } else {
-          for (m = 0; m < 3; m++) ex[idx][m] = x[k + kk][j + jj][i + ii][m];
+          BoundaryValue(i + ii, j + jj, k + kk, mx, my, mz, ex[idx], user);
+          for (m = 0; m < 2; m++) ex[idx][m] = x[k + kk][j + jj][i + ii][m];
         }
         for (m = 0; m < 3; m++) ec[idx][m] = c[k + kk][j + jj][i + ii][m];
       }
@@ -543,6 +546,13 @@ void ApplyBCsElement(PetscInt mx, PetscInt my, PetscInt mz, PetscInt i, PetscInt
                     }
                   }
                 }
+                // Remove all z DOFs
+                PetscInt teidx = 2 + 3 * (ei + ej * NB + ek * NB * NB);
+                if (teidx == tridx) {
+                  jacobian[tridx + NPB * teidx] = 1.;
+                } else {
+                  jacobian[tridx + NPB * teidx] = 0.;
+                }
               }
             }
           }
@@ -690,7 +700,7 @@ PetscErrorCode FormFunctionLocal(DMDALocalInfo *info, Field ***x, Field ***f, vo
     for (j = ys; j < ys + ym; j++) {
       for (i = xs; i < xs + xm; i++) {
         for (l = 0; l < 3; l++) f[k][j][i][l] = 0.;
-        if (user->use_implicit && i == (mx - 1) / 2 && j == (my - 1)) f[k][j][i][1] -= user->load_factor * user->ploading / (mz - 1);
+        if (user->use_implicit && OnPointForceBoundary(user->da, i, j, k)) f[k][j][i][1] -= user->load_factor * user->ploading;
       }
     }
   }
@@ -721,7 +731,8 @@ PetscErrorCode FormFunctionLocal(DMDALocalInfo *info, Field ***x, Field ***f, vo
                 if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz)) {
                   for (l = 0; l < 3; l++) f[k + kk][j + jj][i + ii][l] = x[k + kk][j + jj][i + ii][l] - ex[idx][l];
                 } else {
-                  for (l = 0; l < 3; l++) f[k + kk][j + jj][i + ii][l] += ef[idx][l];
+                  for (l = 0; l < 2; l++) f[k + kk][j + jj][i + ii][l] += ef[idx][l];
+                  f[k + kk][j + jj][i + ii][2] = x[k + kk][j + jj][i + ii][2] - ex[idx][2];
                 }
               }
             }
@@ -818,7 +829,7 @@ PetscErrorCode TangentLoad(SNES snes, Vec X, Vec Q, void *ptr) {
   PetscCall(DMDAVecRestoreArray(da, Xl, &x));
   PetscCall(DMDAVecRestoreArray(da, Ql, &q));
   PetscCall(VecZeroEntries(Q));
-  PetscCall(DMLocalToGlobal(da, Ql, ADD_VALUES, Q));
+  PetscCall(DMLocalToGlobal(da, Ql, INSERT_VALUES, Q));
   PetscCall(DMRestoreLocalVector(da, &Ql));
   PetscCall(DMRestoreLocalVector(da, &Xl));
   PetscCall(DMDAVecRestoreArray(cda, C, &c));
@@ -904,7 +915,7 @@ PetscErrorCode FormRHS(DM da, AppCtx *user, Vec X) {
         x[k][j][i][0] = 0.;
         x[k][j][i][1] = 0.;
         x[k][j][i][2] = 0.;
-        if (OnPointForceBoundary(da, i, j, k)) x[k][j][i][1] = user->ploading / (5 * (my - 1) * (mz - 1));
+        if (OnPointForceBoundary(da, i, j, k)) x[k][j][i][1] = user->ploading;
       }
     }
   }
@@ -978,7 +989,7 @@ PetscErrorCode ArchTSSetup(TS ts, DM dm, AppCtx *user) {
   PetscCall(TSSetType(ts, TSBEULER));
   PetscCall(TSSetProblemType(ts, TS_NONLINEAR));
   user->use_implicit = PETSC_TRUE;
-  PetscCall(DMDATSSetIFunctionLocal(dm, ADD_VALUES, (DMDATSIFunctionLocalFn *)TSFormIFunctionLocal, user));
+  PetscCall(DMDATSSetIFunctionLocal(dm, INSERT_VALUES, (DMDATSIFunctionLocalFn *)TSFormIFunctionLocal, user));
   PetscCall(DMDATSSetIJacobianLocal(dm, (DMDATSIJacobianLocalFn *)TSFormIJacobianLocal, user));
   PetscCall(TSSetMaxTime(ts, 1.0));
   PetscCall(TSSetExactFinalTime(ts, TS_EXACTFINALTIME_MATCHSTEP));
