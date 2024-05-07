@@ -1,3 +1,4 @@
+from os import write
 import pyvista as pv
 import pyvistaqt as pvqt
 import numpy as np
@@ -12,9 +13,15 @@ matplotlib.rcParams["font.family"] = "serif"
 matplotlib.rcParams[
     "text.latex.preamble"
 ] = """
+\\usepackage[T1]{fontenc}
+\\usepackage{newpxmath}
+\\usepackage{newpxtext}
 \\usepackage{amsmath}
 \\usepackage{bm}
 """
+
+plt.rcParams.update({'font.size': 18})
+pv.global_theme.font.family = 'courier'
 
 
 def merge_vector_components(mesh: pv.DataSet, field_name: str = 'Solution', components: list = ['x', 'y', 'z']):
@@ -44,26 +51,27 @@ def plot_force_displacement(df: pd.DataFrame, x_axis: str = 'u_x', ax=None):
     line = ax.plot(df[x_axis], df["force"])[0]
     point = ax.plot(df[x_axis][0], df["force"][0], 'o')[0]
     # ax.set_ylim([-1, 1])
-    ax.set_xlabel(f'${x_axis}$ (mm)')
+    ax.minorticks_on()
+    ax.set_xlabel(f'${x_axis}$ (cm)')
     ax.grid(True)
     return f, x_axis, point
 
 
 def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement_df: pd.DataFrame = None, field_name: str = 'MergedSolution',
-                filename: str = 'solution.gif', skip: int = 1, zoom: float = 1.0):
+                filename: str = None, skip: int = 1, zoom: float = 1.0, save_times=None):
     dargs = dict(
         scalars=field_name,
         cmap='jet',
         lighting=False,
     )
     sargs = dict(
-        height=0.1,
+        height=0.08,
         width=0.8,
         position_x=0.1,
-        position_y=0.85,
+        position_y=0.88,
         title_font_size=22,
         label_font_size=16,
-        title='Y Displacement (mm)',
+        title='Y Displacement (cm)\n',
     )
     write_gif = filename is not None
 
@@ -81,7 +89,7 @@ def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement
     if force_displacement_df is not None:
         figs.append(plot_force_displacement(force_displacement_df, ax=ax[0]))
         figs.append(plot_force_displacement(force_displacement_df, "u_y", ax=ax[1]))
-        ax[0].set_ylabel('Force (N)')
+        ax[0].set_ylabel('Force (kN)')
 
     locs = [(0.02, 0.02), (0.52, 0.06)]
     if len(figs) > 0:
@@ -97,13 +105,22 @@ def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement
         time = np.clip([int(np.floor(time))], 0, len(meshes) - 1)[0]
         for _, x_axis, point in figs:
             if time < force_displacement_df.shape[0] - 1:
-                point.set_data(force_displacement_df[x_axis][time + 1], force_displacement_df["force"][time + 1])
+                print(f"setting data at time {time + 1} to {force_displacement_df[x_axis][time + 1]}")
+                point.set_data([force_displacement_df[x_axis][time + 1]], [force_displacement_df["force"][time + 1]])
         grid.points[:] = meshes[time].points[:]
         grid.translate([0, 10, 0], inplace=True)
         grid.point_data[field_name][:] = meshes[time].point_data[field_name][:]
         if not write_gif:
             plotter.update()
         return time
+
+    basename = Path(filename).stem if filename is not None else None
+    if write_gif:
+        for time in save_times or []:
+            plotter.show(auto_close=False)
+            update_time(time)
+            plotter.update()
+            plotter.screenshot(f"{basename}_{time}.png", scale=2)
 
     if not write_gif:
         plotter.show(auto_close=False, interactive=True, interactive_update=True)
@@ -139,11 +156,23 @@ def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement
 
 if __name__ == '__main__':
     # dir = Path("output/arclength_exact_-12e3")
-    dir = Path("output/newton_lu_-12e3")
+    # dir = Path("output/newton_lu_-12e3")
+    dir = Path.cwd()
     meshes = read_series('solution_..vts', dir=dir)
     forces = read_series('force_..vts', field_name='Force', dir=dir)
     for mesh, force in zip(meshes, forces):
         mesh['Force'] = force['MergedForce']
     df = pd.read_csv(dir / "force_displacement.csv")
     base_mesh = pv.read(dir / "solution_1.vts")
-    plot_series(meshes, base_mesh, df, field_name="Solution.y", filename="fd_fem.gif", zoom=1.25)
+    # plot_series(meshes, base_mesh, df, field_name="Solution.y", zoom=0.9, skip=1)
+    # plot_series(meshes, base_mesh, df, field_name="Solution.y", filename="1_lee_fem.gif", zoom=0.9, skip=1)
+    plot_series(
+        meshes,
+        base_mesh,
+        df,
+        field_name="Solution.y",
+        filename="al_lee.gif",
+        zoom=0.9,
+        skip=100,
+        save_times=[110, 171, 255, 421]
+    )

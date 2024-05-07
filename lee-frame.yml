@@ -1,24 +1,25 @@
 # material properties
-young: 72e3 # N/(mm)^2
+young: 720 # kN/(cm)^2
 poisson: 0.3
 
 # mesh properties and geometry
-rad: 1200.0 # (mm) length of each frame side
-width: 20.0  # (mm) z-width
-height: 30.0 # (mm) y-width
+rad: 120.0 # (cm) length of each frame side
+width: 3  # (mm) z-width
+height: 2 # (mm) y-width
 
 # da_refine: 2 # refine the mesh via subdivision twice
 
 # loading
 loading: 0
-ploading: -1.25e1 # 20kN
+ploading: -1 # kN / cm^3
+# ploading: -7.5 # 40kN
 control_type: arclength
 
 # arc length
 snes_type: newtonal
 snes_newtonal_lambda_min: -1
 snes_newtonal_step_size: 10
-snes_newtonal_max_continuation_steps: 10000
+snes_newtonal_max_continuation_steps: 1000
 snes_max_funcs: -1
 
 # monitoring

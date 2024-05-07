@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   PetscCall(PetscInitialize(&argc, &argv, (char *)0, help));
   PetscCall(FormElements());
   comm = PETSC_COMM_WORLD;
-  PetscCall(DMDACreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_BOX, 70, 2, 2, PETSC_DECIDE,
+  PetscCall(DMDACreate3d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE, DMDA_STENCIL_BOX, 110, 2, 2, PETSC_DECIDE,
                          PETSC_DECIDE, PETSC_DECIDE, 3, 1, NULL, NULL, NULL, &da));
   PetscCall(DMSetFromOptions(da));
   PetscCall(DMSetUp(da));
@@ -166,11 +166,12 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-PetscInt OnBoundary(PetscInt i, PetscInt j, PetscInt k, PetscInt mx, PetscInt my, PetscInt mz) {
-  if (((i == 0 && j == my - 1) || (i == mx - 1 && j == 0))) return 1;
-  // if (((i == 0 || i == mx - 1) && j == 0)) return 1;
-  // if ((i == 0 || i == mx - 1) && j == my / 2) return 1;
-  // if ((i == mx - 1 && j == my - 1) || ((i == 0) && j <= 1)) return 1;
+PetscInt OnBoundary(PetscInt i, PetscInt j, PetscInt k, PetscInt mx, PetscInt my, PetscInt mz, AppCtx *user) {
+  // if (((i == 0 && j == my - 1) || (i == mx - 1 && j == 0))) return 1;
+  // if (i == mx - 1 && j == my / 2) return 1;
+  // if (i == 0 && j == 0) return 1;
+  if ((i == 0 || i == mx - 1) && j == my / 2) return 1;
+  // if ((i == mx - 1 && j == my / 2) || (i == 0 && j == my - 1)) return 1;
   // if (i < 6 || i >= mx - 6) return 1;
   // if (i == 0 && j == (my - 1) / 2 && k == (mz - 1) / 2) return 1;
   // if (i == mx - 1) return 1;
@@ -178,7 +179,7 @@ PetscInt OnBoundary(PetscInt i, PetscInt j, PetscInt k, PetscInt mx, PetscInt my
 }
 
 PetscInt OnPointForceBoundary(DM da, PetscInt i, PetscInt j, PetscInt k) {
-  PetscReal point_x = 240, point_y = 0, point_z = 10;
+  PetscReal point_x = 24, point_y = 0, point_z = 1;
   AppCtx   *user;
   PetscInt  my;
 
@@ -214,6 +215,7 @@ PetscInt OnPointForceBoundary(DM da, PetscInt i, PetscInt j, PetscInt k) {
   }
 
   if ((i == user->point_loc[0] || i == user->point_loc[0] + 1)) return 1;
+  // if (i == user->point_loc[0]) return 1;
   return 0;
 }
 
@@ -430,7 +432,7 @@ void GatherElementData(PetscInt mx, PetscInt my, PetscInt mz, Field ***x, CoordF
       for (ii = 0; ii < NB; ii++) {
         PetscInt idx = ii + jj * NB + kk * NB * NB;
         /* decouple the boundary nodes for the displacement variables */
-        if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz)) {
+        if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz, user)) {
           BoundaryValue(i + ii, j + jj, k + kk, mx, my, mz, ex[idx], user);
         } else {
           BoundaryValue(i + ii, j + jj, k + kk, mx, my, mz, ex[idx], user);
@@ -567,7 +569,7 @@ void FormElementJacobian(Field *ex, CoordField *ec, Field *exf, Field *ef, Field
   } /* end of quadrature points */
 }
 
-void ApplyBCsElement(PetscInt mx, PetscInt my, PetscInt mz, PetscInt i, PetscInt j, PetscInt k, PetscScalar *jacobian) {
+void ApplyBCsElement(PetscInt mx, PetscInt my, PetscInt mz, PetscInt i, PetscInt j, PetscInt k, PetscScalar *jacobian, AppCtx *user) {
   PetscInt ii, jj, kk, ll, ei, ej, ek, el;
   for (kk = 0; kk < NB; kk++) {
     for (jj = 0; jj < NB; jj++) {
@@ -578,7 +580,7 @@ void ApplyBCsElement(PetscInt mx, PetscInt my, PetscInt mz, PetscInt i, PetscInt
             for (ej = 0; ej < NB; ej++) {
               for (ei = 0; ei < NB; ei++) {
                 for (el = 0; el < 3; el++) {
-                  if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz) || OnBoundary(i + ei, j + ej, k + ek, mx, my, mz)) {
+                  if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz, user) || OnBoundary(i + ei, j + ej, k + ek, mx, my, mz, user)) {
                     PetscInt teidx = el + 3 * (ei + ej * NB + ek * NB * NB);
                     if (teidx == tridx) {
                       jacobian[tridx + NPB * teidx] = 1.;
@@ -648,7 +650,7 @@ PetscErrorCode FormJacobianLocal(DMDALocalInfo *info, Field ***x, Mat jacpre, Ma
       for (i = xes; i < xee; i++) {
         GatherElementData(mx, my, mz, x, c, i, j, k, ex, ec, exf, user);
         FormElementJacobian(ex, ec, exf, NULL, NULL, ej, user);
-        ApplyBCsElement(mx, my, mz, i, j, k, ej);
+        ApplyBCsElement(mx, my, mz, i, j, k, ej, user);
         nrows = 0.;
         for (kk = 0; kk < NB; kk++) {
           for (jj = 0; jj < NB; jj++) {
@@ -692,7 +694,7 @@ PetscErrorCode FormJacobianLocal(DMDALocalInfo *info, Field ***x, Mat jacpre, Ma
   for (k = zs; k < zs + zm; k++) {
     for (j = ys; j < ys + ym; j++) {
       for (i = xs; i < xs + xm; i++) {
-        if (OnBoundary(i, j, k, mx, my, mz)) {
+        if (OnBoundary(i, j, k, mx, my, mz, user)) {
           for (m = 0; m < 3; m++) {
             col[m].i = i;
             col[m].j = j;
@@ -770,7 +772,7 @@ PetscErrorCode FormFunctionLocal(DMDALocalInfo *info, Field ***x, Field ***f, vo
             for (ii = 0; ii < NB; ii++) {
               PetscInt idx = ii + jj * NB + kk * NB * NB;
               if (k + kk >= zs && j + jj >= ys && i + ii >= xs && k + kk < zs + zm && j + jj < ys + ym && i + ii < xs + xm) {
-                if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz)) {
+                if (OnBoundary(i + ii, j + jj, k + kk, mx, my, mz, user)) {
                   for (l = 0; l < 3; l++) f[k + kk][j + jj][i + ii][l] = x[k + kk][j + jj][i + ii][l] - ex[idx][l];
                 } else {
                   for (l = 0; l < 2; l++) f[k + kk][j + jj][i + ii][l] += ef[idx][l];
@@ -859,7 +861,7 @@ PetscErrorCode TangentLoad(SNES snes, Vec X, Vec Q, void *ptr) {
             for (ii = 0; ii < NB; ii++) {
               PetscInt idx = ii + jj * NB + kk * NB * NB;
               if (k + kk >= zs && j + jj >= ys && i + ii >= xs && k + kk < zs + zm && j + jj < ys + ym && i + ii < xs + xm) {
-                if (!OnBoundary(i + ii, j + jj, k + kk, mx, my, mz)) {
+                if (!OnBoundary(i + ii, j + jj, k + kk, mx, my, mz, user)) {
                   for (l = 0; l < 3; l++) q[k + kk][j + jj][i + ii][l] += eq[idx][l];
                 }
               }

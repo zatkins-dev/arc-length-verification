@@ -179,6 +179,7 @@ PetscErrorCode MonitorForce(SNES snes, PetscInt its, PetscReal fnorm, void *ctx)
   PetscCall(DMGetNamedGlobalVector(dm, "force", &Q));
   PetscCall(SNESNewtonALComputeFunction(snes, u, Q));
   PetscCall(SNESNewtonALGetLoadParameter(snes, &lambda));
+  PetscCall(DMSetOutputSequenceNumber(dm, monitor_ctx->step, lambda));
   PetscCall(VecScale(Q, lambda));
   PetscCall(PetscObjectSetName((PetscObject)Q, "Force"));
 
@@ -199,6 +200,7 @@ PetscErrorCode MonitorForceDisplacement(SNES snes, PetscInt its, PetscReal fnorm
   PetscReal           lambda, force;
   Field               displacement;
   Vec                 U, F;
+  PetscInt            num_nodes;
   SNESConvergedReason reason;
 
   PetscFunctionBegin;
@@ -226,13 +228,17 @@ PetscErrorCode MonitorForceDisplacement(SNES snes, PetscInt its, PetscReal fnorm
   PetscCall(DMDAGetInfo(da, 0, &mx, &my, &mz, 0, 0, 0, 0, 0, 0, 0, 0, 0));
   PetscCall(DMDAVecGetArrayRead(da, U, &u));
   PetscCall(DMDAVecGetArrayRead(da, F, &f));
+  num_nodes       = 0;
+  force           = 0.0;
+  displacement[0] = displacement[1] = 0.0;
 
   for (k = zs; k < zs + zm; k++) {
     for (j = ys; j < ys + ym; j++) {
       for (i = xs; i < xs + xm; i++) {
-        if (OnPointForceBoundary(da, i, j, k) && k == (mz - 1) / 2 && j == (my - 1)) {
-          force = f[k][j][i][1];
-          for (PetscInt l = 0; l < 2; l++) displacement[l] = u[k][j][i][l];
+        if (OnPointForceBoundary(da, i, j, k)) {
+          num_nodes++;
+          force += f[k][j][i][1];
+          for (PetscInt l = 0; l < 2; l++) displacement[l] += u[k][j][i][l];
         }
       }
     }
@@ -241,6 +247,8 @@ PetscErrorCode MonitorForceDisplacement(SNES snes, PetscInt its, PetscReal fnorm
   PetscCall(DMDAVecRestoreArrayRead(da, U, &u));
   PetscCall(DMDAVecRestoreArrayRead(da, F, &f));
   PetscCall(DMRestoreNamedGlobalVector(da, "force", &F));
+  force /= num_nodes;
+  for (PetscInt l = 0; l < 2; l++) displacement[l] /= num_nodes;
 
   if (monitor_ctx->format == PETSC_VIEWER_ASCII_CSV) {
     PetscCall(PetscViewerASCIIPrintf(monitor_ctx->viewer, "%" PetscInt_FMT ",%g,%0.12e,%0.12e,%0.12e\n", monitor_ctx->step, lambda, force,
@@ -268,6 +276,7 @@ PetscErrorCode TSMonitorForce(TS ts, PetscInt step, PetscReal time, Vec U, void 
 
   PetscFunctionBeginUser;
   PetscCall(DMGetNamedGlobalVector(monitor_ctx->dm, "force", &F));
+  PetscCall(PetscObjectSetName((PetscObject)F, "Force"));
   PetscCall(ComputeForceLoadControl(ts, U, F));
   PetscCall(MonitorVecCommon(monitor_ctx->dm, monitor_ctx->step++, time, F, monitor_ctx));
   PetscCall(DMRestoreNamedGlobalVector(monitor_ctx->dm, "force", &F));
@@ -279,6 +288,7 @@ PetscErrorCode TSMonitorForceDisplacement(TS ts, PetscInt step, PetscReal time, 
   DM         da          = monitor_ctx->dm;
   PetscInt   i, j, k, xs, ys, zs, xm, ym, zm;
   PetscInt   mx, my, mz;
+  PetscInt   num_nodes;
   Field   ***u, ***f;
   PetscReal  force;
   Field      displacement;
@@ -286,6 +296,7 @@ PetscErrorCode TSMonitorForceDisplacement(TS ts, PetscInt step, PetscReal time, 
 
   PetscFunctionBeginUser;
   PetscCall(DMGetNamedGlobalVector(da, "force", &F));
+  PetscCall(PetscObjectSetName((PetscObject)F, "Force"));
   PetscCall(ComputeForceLoadControl(ts, U, F));
   monitor_ctx->step++;
 
@@ -293,17 +304,23 @@ PetscErrorCode TSMonitorForceDisplacement(TS ts, PetscInt step, PetscReal time, 
   PetscCall(DMDAGetInfo(da, 0, &mx, &my, &mz, 0, 0, 0, 0, 0, 0, 0, 0, 0));
   PetscCall(DMDAVecGetArrayRead(da, U, &u));
   PetscCall(DMDAVecGetArrayRead(da, F, &f));
+  num_nodes       = 0;
+  force           = 0.0;
+  displacement[0] = displacement[1] = 0.0;
 
   for (k = zs; k < zs + zm; k++) {
     for (j = ys; j < ys + ym; j++) {
       for (i = xs; i < xs + xm; i++) {
-        if (i == (mx - 1) / 2 && j == (my - 1) && k == (mz - 1) / 2) {
-          force = f[k][j][i][1];
-          for (PetscInt l = 0; l < 2; l++) displacement[l] = u[k][j][i][l];
+        if (OnPointForceBoundary(da, i, j, k)) {
+          num_nodes++;
+          force += f[k][j][i][1];
+          for (PetscInt l = 0; l < 2; l++) displacement[l] += u[k][j][i][l];
         }
       }
     }
   }
+  force /= num_nodes;
+  for (PetscInt l = 0; l < 2; l++) displacement[l] /= num_nodes;
 
   PetscCall(DMDAVecRestoreArrayRead(da, U, &u));
   PetscCall(DMDAVecRestoreArrayRead(da, F, &f));
@@ -314,11 +331,11 @@ PetscErrorCode TSMonitorForceDisplacement(TS ts, PetscInt step, PetscReal time, 
       PetscCall(PetscViewerASCIIPrintf(monitor_ctx->viewer, "step,time,force,u_x,u_y\n"));
       monitor_ctx->is_header_written = PETSC_TRUE;
     }
-    PetscCall(PetscViewerASCIIPrintf(monitor_ctx->viewer, "%" PetscInt_FMT ",%g,%0.12e,%0.12e,%0.12e\n", monitor_ctx->step, time, -force,
+    PetscCall(PetscViewerASCIIPrintf(monitor_ctx->viewer, "%" PetscInt_FMT ",%g,%0.12e,%0.12e,%0.12e\n", monitor_ctx->step, time, force,
                                      displacement[0], -displacement[1]));
   } else {
     PetscCall(PetscViewerASCIIPrintf(monitor_ctx->viewer, "%" PetscInt_FMT " t=%g Force %0.12e Displacement %0.12e,%0.12e\n", monitor_ctx->step, time,
-                                     -force, displacement[0], -displacement[1]));
+                                     force, displacement[0], -displacement[1]));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
