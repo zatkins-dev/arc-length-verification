@@ -5,3 +5,4 @@ output
 *.vts
 *.txt
 *.csv
+*.code-workspace
