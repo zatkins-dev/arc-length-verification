@@ -1,6 +1,4 @@
-from os import write
 import pyvista as pv
-import pyvistaqt as pvqt
 import numpy as np
 from pathlib import Path
 import pandas as pd
@@ -19,6 +17,8 @@ matplotlib.rcParams[
 \\usepackage{amsmath}
 \\usepackage{bm}
 """
+plt.rcParams.update({'font.size': 18})
+pv.global_theme.font.family = 'courier'
 
 plt.rcParams.update({'font.size': 18})
 pv.global_theme.font.family = 'courier'
@@ -83,7 +83,7 @@ def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement
     plotter.view_xy()
     plotter.camera.zoom(zoom)
     t = np.array(range(len(meshes)))
-    grid.translate([0, 10, 0], inplace=True)
+    grid.translate([0, 15, 0], inplace=True)
     figs = []
     fig, ax = plt.subplots(1, 2, tight_layout=True, dpi=150, sharey=True, figsize=(8, 4))
     if force_displacement_df is not None:
@@ -101,6 +101,8 @@ def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement
         #     chart.background_color = (1.0, 1.0, 1.0, 0.4)
         #     plotter.add_chart(chart)
 
+    basename = Path(filename).stem if filename is not None else None
+
     def update_time(time):
         time = np.clip([int(np.floor(time))], 0, len(meshes) - 1)[0]
         for _, x_axis, point in figs:
@@ -108,7 +110,7 @@ def plot_series(meshes: pv.MultiBlock, base_mesh: pv.DataSet, force_displacement
                 print(f"setting data at time {time + 1} to {force_displacement_df[x_axis][time + 1]}")
                 point.set_data([force_displacement_df[x_axis][time + 1]], [force_displacement_df["force"][time + 1]])
         grid.points[:] = meshes[time].points[:]
-        grid.translate([0, 10, 0], inplace=True)
+        grid.translate([0, 15, 0], inplace=True)
         grid.point_data[field_name][:] = meshes[time].point_data[field_name][:]
         if not write_gif:
             plotter.update()

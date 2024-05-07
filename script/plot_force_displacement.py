@@ -1,6 +1,3 @@
-from re import M
-from matplotlib import markers
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib
@@ -13,6 +10,9 @@ matplotlib.rcParams["font.family"] = "serif"
 matplotlib.rcParams[
     "text.latex.preamble"
 ] = """
+\\usepackage[T1]{fontenc}
+\\usepackage{newpxmath}
+\\usepackage{newpxtext}
 \\usepackage{amsmath}
 \\usepackage{bm}
 """
@@ -22,8 +22,7 @@ plt.rc('legend', fontsize=12)    # legend fontsize
 series_names = {
     'arclength_exact': "Arc-Length, Crisfield",
     'arclength_normal': "Arc-Length, Updated Normal",
-    'newton': "Newton,",
-    # 'newton_lu': "Newton, LU",
+    'newton': "Newton",
 }
 
 fargs = {
@@ -84,7 +83,7 @@ if __name__ == "__main__":
             label = f"{series_names[series]}"
             ax.plot(displacement, force, label=label, **fargs[series])
         ax.set_title(args.title)
-        ax.set_xlabel("Displacement [$m$]")
+        ax.set_xlabel("Displacement [$mm$]")
         ax.set_ylabel("Force [$N$]")
         ax.legend(loc="best")
         output_name = Path.cwd() / f"{output_file_name}_{pforce}{file_extension}"
